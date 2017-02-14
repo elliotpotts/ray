@@ -1,9 +1,6 @@
 -- http://users.eecs.northwestern.edu/~clk800/rand-test-study/_gpwfpfmrd/gpwfpfmrd-2009-10-8-12-02-00.pdf
 data ASTTag = ExprT | DeclT | VarT
 
-data Inhabited : (T : Type) -> T -> Type where
-  Eg : {T : Type} -> (v : T) -> Inhabited T v
-
 data AST : (ASTTag -> Type) -> ASTTag -> Type where
   ConstF : Int       ->           AST r ExprT
   AddF   : r ExprT -> r ExprT -> AST r ExprT
@@ -14,15 +11,8 @@ data AST : (ASTTag -> Type) -> ASTTag -> Type where
   SeqF   : r DeclT -> r DeclT -> AST r DeclT
   VF     : String  ->           AST r VarT
 
---  ix : phi         = ExprT, DeclT, etc.
--- phi : Type        = ASTTag
--- Phi : phi -> Type = ASTType
-
 interface HFunctor (pf : (phi -> Type) -> phi -> Type) where
   hmap : ({aix : phi} -> r aix -> r' aix) -> {id : phi} -> (ix ** pf r ix) -> pf r' ix
---hmap : ({aix : phi} -> (Inhabited phi) aix -> r aix -> r' aix) -> {id : phi} -> (ix ** pf r ix) -> pf r' ix
---hmap : ({ix : phi} -> (Inhabited phi) ix -> r ix -> r' ix) -> (ix : phi ** pf r ix) -> pf r' ix
---hmap : ({ix : phi} -> (Inhabited phi) ix -> r ix -> r' ix) -> (Inhabited phi) ix -> pf r ix -> pf r' ix
 
 implementation HFunctor AST where    
   hmap f (ExprT ** ConstF x)  = ConstF x
@@ -34,11 +24,11 @@ implementation HFunctor AST where
   hmap f (VarT ** EVarF x)    = EVarF (f x)
   hmap f (VarT ** VF x)       = VF x
 
-data Hfix : (phi : Type) -> (pf : (phi -> Type) -> phi -> Type) -> tag -> Type where
-  Hin : {phi : Type} -> pf (Hfix phi pf) tag -> Hfix phi pf tag
+data Hfix : (pf : (phi -> Type) -> phi -> Type) -> (phi -> Type) where
+  Hin : {pf : (phi -> Type) -> phi -> Type} -> pf (Hfix pf) ix -> Hfix pf ix
 
 Expr' : Type 
-Expr' = Hfix ASTTag AST ExprT
+Expr' = Hfix AST ExprT
 
 ConstF' : Int -> Expr'
 ConstF' x = Hin (ConstF x)
