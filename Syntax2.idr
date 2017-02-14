@@ -1,4 +1,12 @@
 -- http://users.eecs.northwestern.edu/~clk800/rand-test-study/_gpwfpfmrd/gpwfpfmrd-2009-10-8-12-02-00.pdf
+interface HFunctor (pf : (phi -> Type) -> phi -> Type) where
+  hmap : ({ix : phi} -> r ix -> r' ix) -> (ix ** pf r ix) -> pf r' ix
+
+data Hfix : (pf : (phi -> Type) -> phi -> Type) -> (phi -> Type) where
+  Hin : {pf : (phi -> Type) -> phi -> Type} -> pf (Hfix pf) ix -> Hfix pf ix
+
+------------
+
 data ASTTag = ExprT | DeclT | VarT
 
 data AST : (ASTTag -> Type) -> ASTTag -> Type where
@@ -11,9 +19,6 @@ data AST : (ASTTag -> Type) -> ASTTag -> Type where
   SeqF   : r DeclT -> r DeclT -> AST r DeclT
   VF     : String  ->           AST r VarT
 
-interface HFunctor (pf : (phi -> Type) -> phi -> Type) where
-  hmap : ({aix : phi} -> r aix -> r' aix) -> {id : phi} -> (ix ** pf r ix) -> pf r' ix
-
 implementation HFunctor AST where    
   hmap f (ExprT ** ConstF x)  = ConstF x
   hmap f (ExprT ** AddF x y)  = AddF (f x) (f y)
@@ -24,8 +29,6 @@ implementation HFunctor AST where
   hmap f (VarT ** EVarF x)    = EVarF (f x)
   hmap f (VarT ** VF x)       = VF x
 
-data Hfix : (pf : (phi -> Type) -> phi -> Type) -> (phi -> Type) where
-  Hin : {pf : (phi -> Type) -> phi -> Type} -> pf (Hfix pf) ix -> Hfix pf ix
 
 Expr' : Type 
 Expr' = Hfix AST ExprT
