@@ -1,9 +1,21 @@
 -- http://users.eecs.northwestern.edu/~clk800/rand-test-study/_gpwfpfmrd/gpwfpfmrd-2009-10-8-12-02-00.pdf
-interface HFunctor (pf : (phi -> Type) -> phi -> Type) where
-  hmap : ({ix : phi} -> r ix -> r' ix) -> (ix ** pf r ix) -> pf r' ix
+PF : Type -> Type
+PF phi = (r : phi -> Type) -> (ix : phi) -> Type
 
-data Hfix : (pf : (phi -> Type) -> phi -> Type) -> (phi -> Type) where
-  Hin : {pf : (phi -> Type) -> phi -> Type} -> pf (Hfix pf) ix -> Hfix pf ix
+interface HFunctor (pf : PF phi) where
+  hmap : ({ix : phi} -> r ix -> r' ix) -> pf r ix -> pf r' ix
+
+data Hfix : PF phi -> phi -> Type where
+  Hin : {pf : PF phi} -> pf (Hfix pf) ix -> Hfix pf ix
+
+Hout : Hfix pf r -> pf (Hfix pf) r
+Hout (Hin x) = x
+
+Algebra : PF phi -> (phi -> Type) -> Type
+Algebra pf {phi} r = {ix : phi} -> pf r ix -> r ix
+
+hcata : HFunctor pf => Algebra pf r -> Hfix pf ix -> r ix
+hcata alg = alg . hmap (hcata alg) . Hout
 
 ------------
 
@@ -19,22 +31,47 @@ data AST : (ASTTag -> Type) -> ASTTag -> Type where
   SeqF   : r DeclT -> r DeclT -> AST r DeclT
   VF     : String  ->           AST r VarT
 
-implementation HFunctor AST where    
-  hmap f (ExprT ** ConstF x)  = ConstF x
-  hmap f (ExprT ** AddF x y)  = AddF (f x) (f y)
-  hmap f (ExprT ** MulF x y)  = MulF (f x) (f y)
-  hmap f (ExprT ** LetF x y)  = LetF (f x) (f y)
-  hmap f (DeclT ** BindF x y) = BindF (f x) (f y)
-  hmap f (DeclT ** SeqF x y)  = SeqF (f x) (f y)
-  hmap f (VarT ** EVarF x)    = EVarF (f x)
-  hmap f (VarT ** VF x)       = VF x
+implementation HFunctor AST where
+  hmap f (ConstF x)  = ConstF x
+  hmap f (AddF x y)  = AddF (f x) (f y)
+  hmap f (MulF x y)  = MulF (f x) (f y)
+  hmap f (LetF x y)  = LetF (f x) (f y)
+  hmap f (BindF x y) = BindF (f x) (f y)
+  hmap f (SeqF x y)  = SeqF (f x) (f y)
+  hmap f (EVarF x)   = EVarF (f x)
+  hmap f (VF x)      = VF x
 
+exalg : Algebra AST (
+        \t => case t of
+                  ExprT => Int
+                  DeclT => (String, Int)
+                  VarT => String
+        )
+exalg (ConstF x) = x
+exalg (AddF x y) = x + y
+exalg (BindF v x) = (v, x)
+exalg (VF v) = v
 
 Expr' : Type 
 Expr' = Hfix AST ExprT
+
+Decl' : Type
+Decl' = Hfix AST DeclT
+
+Var' : Type
+Var' = Hfix AST VarT
 
 ConstF' : Int -> Expr'
 ConstF' x = Hin (ConstF x)
 
 AddF' : Expr' -> Expr' -> Expr'
 AddF' x y = Hin (AddF x y)
+
+BindF' : Var' -> Expr' -> Decl'
+BindF' v x = Hin (BindF v x)
+
+Sum : Expr'
+Sum = AddF' (ConstF' 1) (ConstF' 2)
+
+Binding : Decl'
+Binding = BindF' (Hin (VF "three")) Sum
