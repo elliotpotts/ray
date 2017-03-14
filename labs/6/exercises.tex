@@ -1,0 +1,153 @@
+\documentclass{article}
+
+\usepackage[nointegrals]{wasysym}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{xparse}
+\usepackage{xcolor}
+\usepackage{prftree}
+\usepackage{stmaryrd}
+\usepackage{lscape}
+
+\title{Lab Sheet 6 Answers}
+\author{Elliot Potts \\ ep15449@my.bristol.ac.uk}
+\begin{document}
+\maketitle
+Natural Semantics for Booleans:
+
+\newcommand{\sem}[1]{\textcolor{blue}{#1}}
+\newcommand{\syn}[1]{\textcolor{green}{#1}}
+\newcommand{\st}[1]{\textcolor{red}{#1}}
+\newcommand{\den}[2]{\sem{\mathbb{#1} \llbracket \syn{#2} \rrbracket}}
+
+\newcommand{\rulen}[3]{\langle \syn{#1}, \st{#2} \rangle \rightarrow \sem{#3}}
+\DeclareDocumentCommand \conf { m O{\sigma} } {\langle \textcolor{green}{#1}, \textcolor{red}{#2} \rangle}
+
+
+\begin{displaymath}
+  \prftree[r]{\text{[tt\textsubscript{ns}]}}{\rulen{true}{\sigma}{\top}}
+\end{displaymath}
+
+\begin{displaymath}
+  \prftree[r]{\text{[ff\textsubscript{ns}}]}{\rulen{false}{\sigma}{\bot}}
+\end{displaymath}
+
+\begin{displaymath}
+  \prftree[r]{\text{[eq\textsubscript{ns}}]}
+      {\rulen{a_1}{\sigma}{lhs}}
+      {\rulen{a_2}{\sigma}{rhs}}
+      {\rulen{a_1 = a_2}{\sigma}{
+          \color{black}
+          \begin{cases}
+            \sem{\top} & \text{if $\sem{lhs} = \sem{rhs}$} \\
+            \sem{\bot} & \text{otherwise}
+          \end{cases}
+      }}
+\end{displaymath}
+
+\begin{displaymath}
+  \prftree[r]{\text{[leq\textsubscript{ns}}]}
+      {\rulen{a_1}{\sigma}{lhs}}
+      {\rulen{a_2}{\sigma}{rhs}}
+      {\rulen{a_1 \leq a_2}{\sigma}{
+          \color{black}
+          \begin{cases}
+            \sem{\top} & \text{if $\sem{lhs} \leq \sem{rhs}$} \\
+            \sem{\bot} & \text{otherwise}
+          \end{cases}
+      }}
+\end{displaymath}
+
+\begin{displaymath}
+  \prftree[r]{[\text{neg\textsubscript{ns}}]}{\rulen{b}{\sigma}{val}}{\rulen{\neg b}{\sigma}{\neg val}}
+\end{displaymath}
+
+\begin{displaymath}
+  \prftree[r]{\text{[and\textsubscript{ns}\textsuperscript{\LEFTcircle}]}}
+      {\rulen{b_1}{\sigma}{\bot}}
+      {\rulen{b_1 \land b_2}{\sigma}{\bot}}
+\end{displaymath}
+
+\begin{displaymath}
+  \prftree[r]{\text{[and\textsubscript{ns}\textsuperscript{\CIRCLE}]}}
+      {\rulen{b_1}{\sigma}{\bot}}
+      {\rulen{b_2}{\sigma}{rhs}}
+      {\rulen{b_1 \land b_2}{\sigma}{rhs}}
+\end{displaymath}
+
+\begin{displaymath}
+\prftree{\prftree{}{\rulen{false}{\sigma}{\bot}}}{\rulen{\neg (false)}{\sigma}{\top}}
+\end{displaymath}
+
+
+\eject \pdfpagewidth=40in \pdfpageheight=9in
+Evaluation of Factorial Program:
+
+\begin{displaymath}
+  \prftree[r]{\text{[comp\textsubscript{ns}]}}{\prftree[r]{\text{[ass\textsubscript{ns}]}}{\prftree[r]{\text{[lit\textsubscript{ns}]}}{}{\rulen{1}{\sigma[x\mapsto 3]}{1}}}{\rulen{y := 1}{\sigma[x\mapsto 3]}{\sigma[x\mapsto 3][y\mapsto 1]}}}{\prftree[r]{\text{[while\textsubscript{ns}\textsuperscript{tt}]}}{\prftree[r]{\text{[neg\textsubscript{ns}]}}{\prftree[r]{\text{[eq\textsubscript{ns}]}}{\prftree[r]{\text{[st\textsubscript{ns}]}}{}{\rulen{x}{\sigma[x\mapsto 3][y\mapsto 1]}{3}}}{\prftree[r]{\text{[lit\textsubscript{ns}]}}{}{\rulen{1}{\sigma[x\mapsto 3][y\mapsto 1]}{1}}}{\rulen{x = 1}{\sigma[x\mapsto 3][y\mapsto 1]}{\bot}}}{\rulen{\neg (x = 1)}{\sigma[x\mapsto 3][y\mapsto 1]}{\top}}}{\prftree[r]{\text{[comp\textsubscript{ns}]}}{\prftree[r]{\text{[ass\textsubscript{ns}]}}{\prftree[r]{\text{[mul\textsubscript{ns}]}}{\prftree[r]{\text{[st\textsubscript{ns}]}}{}{\rulen{y}{\sigma[x\mapsto 3][y\mapsto 1]}{1}}}{\prftree[r]{\text{[st\textsubscript{ns}]}}{}{\rulen{x}{\sigma[x\mapsto 3][y\mapsto 1]}{3}}}{\rulen{y * x}{\sigma[x\mapsto 3][y\mapsto 1]}{3}}}{\rulen{y := y * x}{\sigma[x\mapsto 3][y\mapsto 1]}{\sigma[x\mapsto 3][y\mapsto 3]}}}{\prftree[r]{\text{[ass\textsubscript{ns}]}}{\prftree[r]{\text{[sub\textsubscript{ns}]}}{\prftree[r]{\text{[st\textsubscript{ns}]}}{}{\rulen{x}{\sigma[x\mapsto 3][y\mapsto 3]}{3}}}{\prftree[r]{\text{[lit\textsubscript{ns}]}}{}{\rulen{1}{\sigma[x\mapsto 3][y\mapsto 3]}{1}}}{\rulen{x - 1}{\sigma[x\mapsto 3][y\mapsto 3]}{2}}}{\rulen{x := x - 1}{\sigma[x\mapsto 3][y\mapsto 3]}{\sigma[y\mapsto 3][x\mapsto 2]}}}{\rulen{y := y * x; x := x - 1}{\sigma[x\mapsto 3][y\mapsto 1]}{\sigma[y\mapsto 3][x\mapsto 2]}}}{\prftree[r]{\text{[while\textsubscript{ns}\textsuperscript{tt}]}}{\prftree[r]{\text{[neg\textsubscript{ns}]}}{\prftree[r]{\text{[eq\textsubscript{ns}]}}{\prftree[r]{\text{[st\textsubscript{ns}]}}{}{\rulen{x}{\sigma[y\mapsto 3][x\mapsto 2]}{2}}}{\prftree[r]{\text{[lit\textsubscript{ns}]}}{}{\rulen{1}{\sigma[y\mapsto 3][x\mapsto 2]}{1}}}{\rulen{x = 1}{\sigma[y\mapsto 3][x\mapsto 2]}{\bot}}}{\rulen{\neg (x = 1)}{\sigma[y\mapsto 3][x\mapsto 2]}{\top}}}{\prftree[r]{\text{[comp\textsubscript{ns}]}}{\prftree[r]{\text{[ass\textsubscript{ns}]}}{\prftree[r]{\text{[mul\textsubscript{ns}]}}{\prftree[r]{\text{[st\textsubscript{ns}]}}{}{\rulen{y}{\sigma[y\mapsto 3][x\mapsto 2]}{3}}}{\prftree[r]{\text{[st\textsubscript{ns}]}}{}{\rulen{x}{\sigma[y\mapsto 3][x\mapsto 2]}{2}}}{\rulen{y * x}{\sigma[y\mapsto 3][x\mapsto 2]}{6}}}{\rulen{y := y * x}{\sigma[y\mapsto 3][x\mapsto 2]}{\sigma[x\mapsto 2][y\mapsto 6]}}}{\prftree[r]{\text{[ass\textsubscript{ns}]}}{\prftree[r]{\text{[sub\textsubscript{ns}]}}{\prftree[r]{\text{[st\textsubscript{ns}]}}{}{\rulen{x}{\sigma[x\mapsto 2][y\mapsto 6]}{2}}}{\prftree[r]{\text{[lit\textsubscript{ns}]}}{}{\rulen{1}{\sigma[x\mapsto 2][y\mapsto 6]}{1}}}{\rulen{x - 1}{\sigma[x\mapsto 2][y\mapsto 6]}{1}}}{\rulen{x := x - 1}{\sigma[x\mapsto 2][y\mapsto 6]}{\sigma[y\mapsto 6][x\mapsto 1]}}}{\rulen{y := y * x; x := x - 1}{\sigma[y\mapsto 3][x\mapsto 2]}{\sigma[y\mapsto 6][x\mapsto 1]}}}{\prftree[r]{\text{[while\textsubscript{ns}\textsuperscript{ff}]}}{\prftree[r]{\text{[neg\textsubscript{ns}]}}{\prftree[r]{\text{[eq\textsubscript{ns}]}}{\prftree[r]{\text{[st\textsubscript{ns}]}}{}{\rulen{x}{\sigma[y\mapsto 6][x\mapsto 1]}{1}}}{\prftree[r]{\text{[lit\textsubscript{ns}]}}{}{\rulen{1}{\sigma[y\mapsto 6][x\mapsto 1]}{1}}}{\rulen{x = 1}{\sigma[y\mapsto 6][x\mapsto 1]}{\top}}}{\rulen{\neg (x = 1)}{\sigma[y\mapsto 6][x\mapsto 1]}{\bot}}}{\rulen{while (\neg (x = 1)) { y := y * x; x := x - 1 }}{\sigma[y\mapsto 6][x\mapsto 1]}{\sigma[y\mapsto 6][x\mapsto 1]}}}{\rulen{while (\neg (x = 1)) { y := y * x; x := x - 1 }}{\sigma[y\mapsto 3][x\mapsto 2]}{\sigma[y\mapsto 6][x\mapsto 1]}}}{\rulen{while (\neg (x = 1)) { y := y * x; x := x - 1 }}{\sigma[x\mapsto 3][y\mapsto 1]}{\sigma[y\mapsto 6][x\mapsto 1]}}}{\rulen{y := 1; while (\neg (x = 1)) { y := y * x; x := x - 1 }}{\sigma[x\mapsto 3]}{\sigma[y\mapsto 6][x\mapsto 1]}}
+\end{displaymath}
+
+Lazy evaluation of conjunction:
+
+\begin{displaymath}
+\prftree[r]{\text{[comp\textsubscript{ns}]}}{\prftree[r]{\text{[comp\textsubscript{ns}]}}{\prftree[r]{\text{[ass\textsubscript{ns}]}}{\prftree[r]{\text{[lit\textsubscript{ns}]}}{}{\rulen{5}{\sigma}{5}}}{\rulen{x := 5}{\sigma}{\sigma[x\mapsto 5]}}}{\prftree[r]{\text{[ass\textsubscript{ns}]}}{\prftree[r]{\text{[lit\textsubscript{ns}]}}{}{\rulen{2}{\sigma[x\mapsto 5]}{2}}}{\rulen{y := 2}{\sigma[x\mapsto 5]}{\sigma[x\mapsto 5][y\mapsto 2]}}}{\rulen{x := 5; y := 2}{\sigma}{\sigma[x\mapsto 5][y\mapsto 2]}}}{\prftree[r]{\text{[if\textsubscript{ns}\textsuperscript{tt}]}}{\prftree[r]{\text{[and\textsubscript{ns}\textsuperscript{\CIRCLE}]}}{\prftree[r]{\text{[leq\textsubscript{ns}]}}{\prftree[r]{\text{[st\textsubscript{ns}]}}{}{\rulen{y}{\sigma[x\mapsto 5][y\mapsto 2]}{2}}}{\prftree[r]{\text{[st\textsubscript{ns}]}}{}{\rulen{x}{\sigma[x\mapsto 5][y\mapsto 2]}{5}}}{\rulen{y \leq x}{\sigma[x\mapsto 5][y\mapsto 2]}{\top}}}{\prftree[r]{\text{[eq\textsubscript{ns}]}}{\prftree[r]{\text{[st\textsubscript{ns}]}}{}{\rulen{x}{\sigma[x\mapsto 5][y\mapsto 2]}{5}}}{\prftree[r]{\text{[lit\textsubscript{ns}]}}{}{\rulen{5}{\sigma[x\mapsto 5][y\mapsto 2]}{5}}}{\rulen{x = 5}{\sigma[x\mapsto 5][y\mapsto 2]}{\top}}}{\rulen{y \leq x \land x = 5}{\sigma[x\mapsto 5][y\mapsto 2]}{\top}}}{\prftree[r]{\text{[ass\textsubscript{ns}]}}{\prftree[r]{\text{[lit\textsubscript{ns}]}}{}{\rulen{100}{\sigma[x\mapsto 5][y\mapsto 2]}{100}}}{\rulen{z := 100}{\sigma[x\mapsto 5][y\mapsto 2]}{\sigma[x\mapsto 5][y\mapsto 2][z\mapsto 100]}}}{\rulen{if (y \leq x \land x = 5) then { z := 100 } else { z := -50 }}{\sigma[x\mapsto 5][y\mapsto 2]}{\sigma[x\mapsto 5][y\mapsto 2][z\mapsto 100]}}}{\rulen{x := 5; y := 2; if (y \leq x \land x = 5) then { z := 100 } else { z := -50 }}{\sigma}{\sigma[x\mapsto 5][y\mapsto 2][z\mapsto 100]}}
+\end{displaymath}
+
+Strict evaluation of conjunction:
+
+\begin{displaymath}
+\prftree[r]{\text{[comp\textsubscript{ns}]}}{\prftree[r]{\text{[comp\textsubscript{ns}]}}{\prftree[r]{\text{[ass\textsubscript{ns}]}}{\prftree[r]{\text{[lit\textsubscript{ns}]}}{}{\rulen{5}{\sigma}{5}}}{\rulen{x := 5}{\sigma}{\sigma[x\mapsto 5]}}}{\prftree[r]{\text{[ass\textsubscript{ns}]}}{\prftree[r]{\text{[lit\textsubscript{ns}]}}{}{\rulen{2}{\sigma[x\mapsto 5]}{2}}}{\rulen{y := 2}{\sigma[x\mapsto 5]}{\sigma[x\mapsto 5][y\mapsto 2]}}}{\rulen{x := 5; y := 2}{\sigma}{\sigma[x\mapsto 5][y\mapsto 2]}}}{\prftree[r]{\text{[if\textsubscript{ns}\textsuperscript{ff}]}}{\prftree[r]{\text{[and\textsubscript{ns}\textsuperscript{\LEFTcircle}]}}{\prftree[r]{\text{[leq\textsubscript{ns}]}}{\prftree[r]{\text{[st\textsubscript{ns}]}}{}{\rulen{x}{\sigma[x\mapsto 5][y\mapsto 2]}{5}}}{\prftree[r]{\text{[st\textsubscript{ns}]}}{}{\rulen{y}{\sigma[x\mapsto 5][y\mapsto 2]}{2}}}{\rulen{x \leq y}{\sigma[x\mapsto 5][y\mapsto 2]}{\bot}}}{\rulen{x \leq y \land x = 5}{\sigma[x\mapsto 5][y\mapsto 2]}{\bot}}}{\prftree[r]{\text{[ass\textsubscript{ns}]}}{\prftree[r]{\text{[lit\textsubscript{ns}]}}{}{\rulen{-50}{\sigma[x\mapsto 5][y\mapsto 2]}{-50}}}{\rulen{z := -50}{\sigma[x\mapsto 5][y\mapsto 2]}{\sigma[x\mapsto 5][y\mapsto 2][z\mapsto -50]}}}{\rulen{\text{if} (x \leq y \land x = 5) \text{then} { z := 100 } \text{else} { z := -50 }}{\sigma[x\mapsto 5][y\mapsto 2]}{\sigma[x\mapsto 5][y\mapsto 2][z\mapsto -50]}}}{\rulen{x := 5; y := 2; \text{if} (x \leq y \land x = 5) \text{then} { z := 100 } \text{else} { z := -50 }}{\sigma}{\sigma[x\mapsto 5][y\mapsto 2][z\mapsto -50]}}
+\end{displaymath}
+
+%% \begin{displaymath}
+%%   \prftree
+%%       {\prftree[r]{[$ass_{ns}$]}
+%%         {\rulen
+%%           {\text{y:=1}}
+%%           {\sigma[\syn{x}\mapsto\sem{3}]}
+%%           {\sigma[\syn{x}\mapsto\sem{3}][\syn{y}\mapsto\sem{1}]}
+%%         }
+%%       }
+%%       {\prftree[r]{$while_{ns}^{tt}$}
+%%         {\prftree[r]{$seq_{ns}$}
+%%           {\prftree
+%%             {a}
+%%             {c}
+%%           }
+%%           {\prftree
+%%             {a}
+%%             {\rulen
+%%               {before}
+%%               {st}
+%%               {\sigma[\syn{x}\mapsto\sem{2}][\syn{y}\mapsto\sem{3}]}
+%%             }
+%%           }
+%%           {\rulen
+%%             {\text{body}}
+%%             {\sigma[\syn{x}\mapsto\sem{3}][\syn{y}\mapsto\sem{1}]}
+%%             {\sigma[\syn{x}\mapsto\sem{2}][\syn{y}\mapsto\sem{3}]}
+%%           }
+%%         }
+%%         {\prftree[r]{$while_{ns}^{tt}$}
+%%           {bar}
+%%           {\rulen
+%%             {\text{loop}}
+%%             {\sigma[\syn{x}\mapsto\sem{2}][\syn{y}\mapsto\sem{3}]}
+%%             {\sigma[\syn{x}\mapsto{1}][\syn{y}\mapsto{6}]}
+%%           }
+%%         }
+%%         {\rulen
+%%           {\text{loop}}
+%%           {\sigma[\syn{x}\mapsto\sem{3}][\syn{y}\mapsto\sem{1}]}
+%%           {\sigma[\syn{x}\mapsto{1}][\syn{y}\mapsto{6}]}
+%%         }
+%%       }
+%%       {\rulen
+%%         {\text{y:=1; loop}}
+%%         {\sigma[\syn{x}\mapsto\sem{3}]}
+%%         {\sigma[\syn{x}\mapsto{1}][\syn{y}\mapsto{6}]}
+%%       }
+%% \end{displaymath}
+
+
+\end{document}

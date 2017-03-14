@@ -1,0 +1,26 @@
+\documentclass{article}
+
+\usepackage[nointegrals]{wasysym}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{xparse}
+\usepackage{xcolor}
+\usepackage{prftree}
+\usepackage{stmaryrd}
+\usepackage{lscape}
+
+\newcommand{\sem}[1]{\textcolor{blue}{#1}}
+\newcommand{\syn}[1]{\textcolor{green}{#1}}
+\newcommand{\st}[1]{\textcolor{red}{#1}}
+\newcommand{\den}[2]{\sem{\mathbb{#1} \llbracket \syn{#2} \rrbracket}}
+
+\newcommand{\rulen}[3]{\langle \syn{#1}, \st{#2} \rangle \rightarrow \sem{#3}}
+\DeclareDocumentCommand \conf { m O{\sigma} } {\langle \textcolor{green}{#1}, \textcolor{red}{#2} \rangle}
+
+\begin{document}
+\eject \pdfpagewidth=40in \pdfpageheight=9in
+\begin{displaymath}
+%insertproofhere
+\end{displaymath}
+
+\end{document}
