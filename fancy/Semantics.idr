@@ -7,6 +7,12 @@ State = String -> Int
 fresh : State
 fresh = const 0
 
+cond : (a -> Bool) -> (a -> b) -> (a -> b) -> (a -> b)
+cond b f g x = case b x of
+                    True => f x
+                    False => g x
+                    
+
 evaluateResult : NodeTag -> Type
 evaluateResult AExprT = Int
 evaluateResult BExprT = Bool
@@ -30,7 +36,7 @@ evaluate {t = BExprT} σ = hcata alg where
   alg (LTETest x y) = x <= y
   alg (Negation x) = not x
   alg (Conjunction x y) = x && y
-  
+
 evaluate {t = StmtT} σ = hcata alg where
   alg : FAlgebra AST Main.evaluateResult
   alg (Assign v x) = \s => case s == v of
@@ -39,8 +45,10 @@ evaluate {t = StmtT} σ = hcata alg where
   alg Skip = σ
   alg (Then x y) = y
   alg (IfThenElse cond cons alt) = if cond then cons else alt
-  alg (WhileDo cond body) = if cond then ?body else σ -- impossible maybe
+  alg (WhileDo b S) = ?help --fix f where
+--    f g = cond b (g . S) id
+--    f g = if b then (g . S) else id
 
-evaluate' : State -> Hfix AST t -> Hfix AST t
-evaluate' {t = AExprT} σ = hana coalg where
-  coalg : Cofalgebra AST Main.evaluateResult
+--evaluate' : State -> Hfix AST t -> Hfix AST t
+--evaluate' {t = AExprT} σ = hana coalg where
+--  coalg : Cofalgebra AST Main.evaluateResult

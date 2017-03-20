@@ -2,6 +2,9 @@ module Hfix
 
 %access public export
 
+fix : (a -> a) -> a
+fix f = f (fix f)
+
 -- http://users.eecs.northwestern.edu/~clk800/rand-test-study/_gpwfpfmrd/gpwfpfmrd-2009-10-8-12-02-00.pdf
 PF : Type -> Type
 PF phi = (r : phi -> Type) -> (ix : phi) -> Type
