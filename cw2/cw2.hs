@@ -96,44 +96,6 @@ identifier = (lexeme . try) (p >>= check) where
 
 -----------------------
 
--- aterm :: Parser Aexp
--- aterm =  try (N <$> lexeme Lexer.integer)
---     <|> try (V <$> identifier)
---     <|> parenthesised aexp
-
--- product :: Parser Aexp
--- product =  try (Mult <$> aterm <*> (symbol "*" *>) product)
---        <|> aterm
-
--- sum :: Parser Aexp
--- sum =  try (Add <$> product <*> (symbol "+" *>) sum)
---    <|> product
-
--- difference :: Parser Aexp
--- difference =  try (Sub <$> sum <*> (symbol "-" *>) difference)
---           <|> sum
-
--- aexp :: Parser Aexp
--- aexp = difference
-
--- bterm :: Parser Bexp
--- bterm =  try (word "true" *> pure TRUE)
---     <|> try (word "false" *> pure FALSE)
---     <|> try (Eq <$> aexp <*> (symbol "=" *>) aexp)
---     <|> try (Le <$> aexp <*> (symbol "=" *>) aexp)
---     <|> parenthesised bexp
-
--- negation :: Parser Bexp
--- negation =  try (Neg <$> (symbol "!" *>) negation)
---         <|> bterm
-
--- conjunction :: Parser Bexp
--- conjunction =  try (And <$> negation <*> (symbol "&" *>) conjunction)
---            <|> negation
-
--- bexp :: Parser Bexp
--- bexp = conjunction
-
 aexp :: Parser Aexp
 aexp = makeExprParser terms ops where
   ops = [ [InfixR (Mult <$ symbol "*") ]
@@ -155,8 +117,6 @@ bexp = makeExprParser terms ops where
        <|> try (Eq <$> aexp <*> (symbol "=" *>) aexp)
        <|> parenthesised bexp
         
-
-----------------------------------------
 decv :: Parser DecV
 decv = many ((,) <$> (word "var" *>) identifier <*> (symbol ":=" *>) aexp <* semicolon) 
 
