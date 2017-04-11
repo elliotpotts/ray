@@ -123,8 +123,6 @@ decv = many ((,) <$> (word "var" *>) identifier <*> (symbol ":=" *>) aexp <* sem
 decp :: Parser DecP
 decp = many ((,) <$> (word "proc" *>) identifier <*> (word "is" *>) stm <* semicolon)
 
--- else & do are greedy
-
 stm :: Parser Stm
 stm =  try (Skip <$ word "skip")
    <|> try (Ass <$> identifier <*> (symbol ":=" *>) aexp)
@@ -141,8 +139,9 @@ compound =  try (Comp <$> stm <*> (semicolon *>) compound)
 program :: Parser Stm
 program = between eatSpace eof compound
 
+-- For submission
 parse :: String -> Stm
-parse x = either (const Skip) id (MP.parse stm "" x)
+parse x = either (const Skip) id (MP.parse program "" x)
 
 --------------------------------------------------
 -- Semantics
@@ -191,9 +190,9 @@ s_dynamic stm sigma = valof $ evalS stm (EvalState sigma (const undefined)) wher
   evalS (Comp a b) s@(EvalState sigma tau) = let s' = (evalS a s) in evalS b s'
   evalS (If cond thn els) s@(EvalState sigma tau) = if (evalB cond sigma) then evalS thn s else evalS els s
   evalS (While cond body) s@(EvalState sigma tau) = if (evalB cond sigma) then let s' = (evalS body s) in (evalS (While cond body) s') else s
-  evalS (Block decv decp body) s@(EvalState sigma tau) = evalS body (EvalState sigma' tau') where
-    sigma' =
-  evalS (Call p) s@(EvalState sigma tau) = evalS (tau p) s
+  -- evalS (Block decv decp body) s@(EvalState sigma tau) = evalS body (EvalState sigma' tau') where
+  --   sigma' =
+  -- evalS (Call p) s@(EvalState sigma tau) = evalS (tau p) s
 
 --s_dynamic :: Stm -> State -> State
 --s_mixed :: Stm -> State -> State
