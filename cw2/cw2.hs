@@ -49,9 +49,12 @@ showStm n (Ass var val) = (indent n) ++ var ++ " := " ++ (show val)
 showStm n (Comp a b) = (showStm n a) ++ ";\n" ++ (showStm n b)
 showStm n (If cond thn els) = (indent n) ++ "if " ++ (show cond) ++ " then\n" ++ (showStm (n+1) thn) ++ "\n" ++ (indent n) ++ "else\n" ++ (showStm (n+1) els)
 showStm n (While cond body) = (indent n) ++ "while " ++ (show cond) ++ " do\n" ++ (showStm (n+1) body)
-showStm n (Block decs deps body) = (indent n) ++ "begin\n" ++ s_decs ++ s_deps ++ (showStm (n+1) body) ++ "\n" ++ (indent n) ++ "end" where
+showStm n (Block decs deps body@(Block _ _ _)) = (indent n) ++ "begin\n" ++ s_decs ++ s_deps ++ (showStm (n+1) body) ++ "\n" ++ (indent n) ++ "end" where
   s_decs = concat $ map (\(var, exp) -> (indent (n+1)) ++ "var " ++ var ++ " := " ++ (show exp) ++ ";\n") decs
   s_deps = concat $ map (\(name, body) -> (indent (n+1)) ++ "proc " ++ name ++ " is\n" ++ (showStm (n+1) body) ++ ";\n") deps
+showStm n (Block decs deps body) = (indent n) ++ "begin\n" ++ s_decs ++ s_deps ++ (showStm (n+1) body) ++ "\n" ++ (indent n) ++ "end" where
+  s_decs = concat $ map (\(var, exp) -> (indent (n+1)) ++ "var " ++ var ++ " := " ++ (show exp) ++ ";\n") decs
+  s_deps = concat $ map (\(name, body) -> (indent (n+1)) ++ "proc " ++ name ++ " is\n" ++ (showStm (n+2) body) ++ ";\n") deps
 showStm n (Call name) = (indent n) ++ "call " ++ name
   
 instance Show Stm where
@@ -144,22 +147,12 @@ parse :: String -> Stm
 parse x = either (const Skip) id (MP.parse program "" x)
 
 --------------------------------------------------
--- Semantics
+-- Denotational Semantics
 --------------------------------------------------
-
-data EvalState = EvalState { valof :: Var -> Z, procof :: Pname -> Stm }
-replaceV :: Var -> Z -> EvalState -> EvalState
-replaceV var val (EvalState sigma tau) = EvalState sigma' tau where
-  sigma' x = if x == var then val else sigma x
-replaceP :: Pname -> Stm -> EvalState -> EvalState
-replaceP pname body (EvalState sigma tau) = EvalState sigma tau' where
-  tau' x = if x == pname then body else tau x
 
 type T = Bool
 type Z = Integer
 type State = Var -> Z
-
--- "Denotational"
 
 evalA :: Aexp -> State -> Z
 evalA (N n) _ = n
@@ -176,32 +169,73 @@ evalB (And lhs rhs) sigma = (evalB lhs sigma) && (evalB rhs sigma)
 evalB (Le lhs rhs) sigma = (evalA lhs sigma) <= (evalA rhs sigma)
 evalB (Eq lhs rhs) sigma = (evalA lhs sigma) == (evalA rhs sigma)
 
--- "Natural"
+--------------------------------------------------
+-- Natural Semantics
+--------------------------------------------------
+newtype EnvP = EnvP (Pname -> (Stm, EnvP))
+type EnvV = Var -> Z
+data Env = Env {sigma :: EnvV, tau :: Pname -> Stm}
+blankEnv :: Env
+blankEnv = Env (const undefined) (const undefined)
 
---data Stm = Ass Var Aexp | Comp Stm Stm | If Bexp Stm Stm | While Bexp Stm | Block DecV DecP Stm | Call Pname
---type DecV = [(Var,Aexp)]
---type DecP = [(Pname,Stm)]
+sub :: Eq a => (a -> b) -> a -> b -> (a -> b)
+sub f x y x' = if x' == x then y else f x'
 
+subV :: Env -> Var -> Z -> Env
+subV (Env sigmaf tauf) var val = Env sigmaf' tauf where
+  sigmaf' var' = if var == var' then val else sigmaf var'
+
+defProc :: (Pname, Stm) -> Env -> Env
+defProc (pname, body) (Env sigmaf tauf) = Env sigmaf tauf' where
+  tauf' pname' = if pname' == pname then body else tauf pname'
+
+evalS :: Stm -> Env -> Env
+evalS Skip env = env
+evalS (Ass var exp) env = subV env var (evalA exp $ sigma env)
+evalS (Comp a b) env = let env' = (evalS a env) in evalS b env'
+evalS (If cond thn els) env = if (evalB cond $ sigma env) then evalS thn env else evalS els env
+evalS (While cond body) env = if (evalB cond $ sigma env) then evalS (While cond body) env' else env where
+  env' = (evalS body env)
+evalS (Block decv decp body) env = evalS body env'' where
+  env' = evalr . (map toAss) $ decv
+    where evalr = foldr evalS env
+          toAss = uncurry Ass
+  env'' = foldr defProc env' decp
+evalS (Call p) s = evalS (tau s p) s
+
+--------------------------------------------------
+-- Variable Renaming
+--------------------------------------------------
+
+
+--------------------------------------------------
+-- Submission
+--------------------------------------------------
+--s_static :: Stm -> State -> State
 s_dynamic :: Stm -> State -> State
-s_dynamic stm sigma = valof $ evalS stm (EvalState sigma (const undefined)) where
-  evalS :: Stm -> EvalState -> EvalState
-  evalS Skip s@(EvalState sigma tau) = s
-  evalS (Ass v a) s@(EvalState sigma tau) = replaceV v (evalA a sigma) s
-  evalS (Comp a b) s@(EvalState sigma tau) = let s' = (evalS a s) in evalS b s'
-  evalS (If cond thn els) s@(EvalState sigma tau) = if (evalB cond sigma) then evalS thn s else evalS els s
-  evalS (While cond body) s@(EvalState sigma tau) = if (evalB cond sigma) then let s' = (evalS body s) in (evalS (While cond body) s') else s
-  -- evalS (Block decv decp body) s@(EvalState sigma tau) = evalS body (EvalState sigma' tau') where
-  --   sigma' =
-  -- evalS (Call p) s@(EvalState sigma tau) = evalS (tau p) s
-
---s_dynamic :: Stm -> State -> State
+s_dynamic stm st = sigma $ evalS stm (Env st (const undefined))
 --s_mixed :: Stm -> State -> State
 
 --------------------------------------------------
 -- Test programs
 --------------------------------------------------
+valof :: Var -> String -> Maybe Z
+valof var src = (\s -> s var) <$> (\x -> s_dynamic x (const 0)) <$> parseMaybe program src
+
 yval :: String -> Maybe Z
-yval str = (\s -> s "y") <$> (\x -> s_dynamic x (const 0)) <$> parseMaybe program str
+yval = valof "y"
+
+simple_call :: String
+simple_call = "y:=1; \n\
+              \begin \n\
+              \    proc fac is \n\
+              \        skip; \n\
+              \    skip \n\
+              \end;\n\
+              \call fac;\n\
+              \y:= 10;\n\
+              \call fac\n"
+                      
 
 fac_loop :: String
 fac_loop = "/*fac loop (p.23)*/ \n\
@@ -221,14 +255,33 @@ fac_call = "//fac call (p.55) \n\
            \        var z:=x; \n\
            \        if x=1 then \n\
            \            skip \n\
-           \        else \n\
+           \        else (\n\
            \            x:=x-1; \n\
            \            call fac; \n\
            \            y:=z*y \n\
+           \        )\n\
            \    end; \n\
-           \    y:=1; \n\
+           \    y := 1; \n\
+           \    x := 5; \n\
            \    call fac \n\
            \end\n"
+
+fac_call_fixed :: String
+fac_call_fixed = "x := 5;\n\
+                 \y := 1; \n\
+                 \begin \n\
+                 \    proc fac is \n\
+                 \    begin \n\
+                 \        if x = 1 then \n\
+                 \            skip \n\
+                 \        else (\n\
+                 \            y := y * x; \n\
+                 \            x := x - 1; \n\
+                 \            call fac \n\
+                 \        )\n\
+                 \    end; \n\
+                 \    call fac \n\
+                 \end"
 
 scope_test :: String
 scope_test = "//scope test (p.53) \n\
