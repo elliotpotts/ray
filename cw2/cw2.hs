@@ -172,9 +172,11 @@ evalB (Eq lhs rhs) sigma = (evalA lhs sigma) == (evalA rhs sigma)
 --------------------------------------------------
 -- Natural Semantics
 --------------------------------------------------
-newtype EnvP = EnvP (Pname -> (Stm, EnvP))
+--newtype EnvP = EnvP (Pname -> (Stm, EnvP))
 type EnvV = Var -> Z
-data Env = Env {sigma :: EnvV, tau :: Pname -> Stm}
+type EnvP = Pname -> Stm
+data Env = Env {sigma :: EnvV, tau :: EnvP}
+
 blankEnv :: Env
 blankEnv = Env (const undefined) (const undefined)
 
@@ -295,3 +297,6 @@ scope_test = "//scope test (p.53) \n\
              \        call q\n\
              \    end\n\
              \end\n"
+
+parity :: String
+parity = "y := 203; begin proc iseven is begin proc isodd is (if y = 0 then mod2 := 1 else y := y - 1; call iseven); if y = 0 then mod2 := 0 else (y := y - 1; call isodd) end; call iseven end"
