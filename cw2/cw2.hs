@@ -208,7 +208,7 @@ evalS (envv, sto, envp) (Ass var exp) = (envv, ass sto envv var val, envp) where
 evalS env (Comp s1 s2) = env'' where
   env' = evalS env s1
   env'' = evalS env' s2
-evalS env@(envv, sto, envp) (If cond thn elz) = (evalS env) . (bool thn elz) . (evalB (toSt sto envv)) $ cond
+evalS env@(envv, sto, envp) (If cond thn elz) = (evalS env) . (bool elz thn) . (evalB (toSt sto envv)) $ cond
 evalS env@(envv, sto, envp) (While cond body) = (bool env env'') . (evalB (toSt sto envv)) $ cond where
   env' = evalS env body
   env'' = evalS env' (While cond body)
@@ -229,16 +229,19 @@ evalS env@(envv, sto, envp) (Block decv decp body) = env'' where
   env'' = evalS (env'v, sto', env'p) body
 evalS env@(envv, sto, envp@(EnvP envpf)) (Call pname) = (envv, sto', envp) where
   (pbody, penvv, penvp) = envpf pname
-  (_, sto', _) = evalS (penvv, sto, penvp) pbody
+  recEnvp = EnvP $ case penvp of
+    EnvP penvpf -> subs penvpf pname (pbody, penvv, recEnvp)
+  (_, sto', _) = evalS (penvv, sto, recEnvp) pbody
 --------------------------------------------------
 -- Submission
 --------------------------------------------------
 emptyEnv :: Env
-emptyEnv = (const 0, sto, envp) where
+emptyEnv = (envv, sto, EnvP envpf) where
+  envv = const 0
   esto (At l) = undefined
   esto New = 1
   sto _ = esto
-  envp = EnvP (const undefined)--(Skip, const 0, envp))
+  envpf _ =  (Skip, envv, EnvP envpf)
 
 s_static :: Stm -> State -> State
 s_static stm st = toSt sto envv where
@@ -291,6 +294,19 @@ fac_loop_blk = "/*fac loop (p.23)*/ \n\
                \        x:=x-1 \n\
                \    )\n\
                \end"
+
+testrec :: String
+testrec = "begin \n\
+          \    proc rep is begin \n\
+          \        if false then\n\
+          \            x := 10 \n\
+          \        else (\n\
+          \            x := 0\n\
+          \        )\n\
+          \    end; \n\
+          \    x := 4; \n\
+          \    call rep \n\
+          \end"
 
 fac_call :: String
 fac_call = "//fac call (p.55) \n\
