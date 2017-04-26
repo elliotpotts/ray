@@ -275,6 +275,17 @@ fac_loop = "/*fac loop (p.23)*/ \n\
             \);\n\
             \skip\n"
 
+fac_loop_blk :: String
+fac_loop_blk = "/*fac loop (p.23)*/ \n\
+               \begin\n\
+               \    var y := 1; \n\
+               \    var x := 5; \n\
+               \    (while !(x=1) do \n\
+               \        y:=y*x; \n\
+               \        x:=x-1 \n\
+               \    )\n\
+               \end"
+
 fac_call :: String
 fac_call = "//fac call (p.55) \n\
            \begin \n\
