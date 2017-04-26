@@ -177,7 +177,7 @@ evalB sigma (Eq lhs rhs) = (evalA sigma lhs) == (evalA sigma rhs)
 --------------------------------------------------
 type Loc = Z
 data StoreReq = New | At Loc deriving Eq
-type Store = StoreReq -> Z
+type Store = Var -> StoreReq -> Z
 type EnvV = Var -> Loc
 newtype EnvP = EnvP (Pname -> (Stm, EnvV, EnvP))
 type Env = (EnvV, Store, EnvP)
@@ -195,16 +195,21 @@ subs f x' fx' x = if x == x' then fx' else f x
 freshen :: Loc -> Loc
 freshen = succ
 
+toSt :: Store -> EnvV -> State
+toSt sto envv var = (sto var) (At (envv var))
+
+ass :: Store -> EnvV -> Var -> Z -> Store
+ass sto envv var val = subs sto var (subs (sto var) (At loc) val) where loc = envv var
+
 evalS :: Env -> Stm -> Env
 evalS env Skip = env
-evalS (envv, sto, envp) (Ass var exp) = (envv, subs sto (At loc) val, envp) where
-  loc = envv var
-  val = evalA (sto . At . envv) exp
+evalS (envv, sto, envp) (Ass var exp) = (envv, ass sto envv var val, envp) where
+  val = evalA (toSt sto envv) exp
 evalS env (Comp s1 s2) = env'' where
   env' = evalS env s1
   env'' = evalS env' s2
-evalS env@(envv, sto, envp) (If cond thn elz) = (evalS env) . (bool thn elz) . (evalB (sto . At . envv)) $ cond
-evalS env@(envv, sto, envp) (While cond body) = (bool env env'') . (evalB (sto . At . envv)) $ cond where
+evalS env@(envv, sto, envp) (If cond thn elz) = (evalS env) . (bool thn elz) . (evalB (toSt sto envv)) $ cond
+evalS env@(envv, sto, envp) (While cond body) = (bool env env'') . (evalB (toSt sto envv)) $ cond where
   env' = evalS env body
   env'' = evalS env' (While cond body)
 evalS env@(envv, sto, envp) (Block decv decp body) = env'' where
@@ -212,11 +217,11 @@ evalS env@(envv, sto, envp) (Block decv decp body) = env'' where
     updv :: DecV -> EnvV -> Store -> (EnvV, Store)
     updv [] envv sto = (envv, sto)
     updv ((var, aexp):xs) envv sto = updv xs env'v sto'' where
-      loc = sto New
+      loc = sto var  New
       env'v = subs envv var loc
-      val = evalA (sto . At . envv) aexp
-      sto' = subs sto (At loc) val
-      sto'' = subs sto' New (freshen loc)
+      val = evalA (toSt sto envv) aexp
+      sto' = ass sto env'v var val --subs sto (At loc) val
+      sto'' = subs sto' var (subs (sto' var) New (freshen loc))
   env'p = updp decp envp where
     updp :: DecP -> EnvP -> EnvP
     updp [] envp = envp
@@ -230,12 +235,13 @@ evalS env@(envv, sto, envp@(EnvP envpf)) (Call pname) = (envv, sto', envp) where
 --------------------------------------------------
 emptyEnv :: Env
 emptyEnv = (const 0, sto, envp) where
-  sto (At l) = undefined
-  sto New = 1
+  esto (At l) = undefined
+  esto New = 1
+  sto _ = esto
   envp = EnvP (const undefined)--(Skip, const 0, envp))
 
 s_static :: Stm -> State -> State
-s_static stm st = sto . At . envv where
+s_static stm st = toSt sto envv where
   (envv, sto, envp) = evalS emptyEnv stm
 
 --s_dynamic :: Stm -> State -> State
