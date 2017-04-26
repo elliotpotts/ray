@@ -6,6 +6,7 @@ import qualified Text.Megaparsec.Lexer as Lexer
 import Text.Megaparsec.Expr
 import Text.Megaparsec.String
 import Data.List hiding (product, sum)
+import Data.Bool
 
 --------------------------------------------------
 -- Syntax
@@ -14,8 +15,10 @@ import Data.List hiding (product, sum)
 type Num = Integer
 type Var = String
 type Pname = String
-type DecV = [(Var,Aexp)]
-type DecP = [(Pname,Stm)]
+type Dec1V = (Var, Aexp)
+type Dec1P = (Pname, Stm)
+type DecV = [Dec1V]
+type DecP = [Dec1P]
 
 data Aexp = N Num | V Var | Mult Aexp Aexp | Add Aexp Aexp | Sub Aexp Aexp
 data Bexp = TRUE | FALSE | Neg Bexp | And Bexp Bexp | Le Aexp Aexp | Eq Aexp Aexp
@@ -154,75 +157,98 @@ type T = Bool
 type Z = Integer
 type State = Var -> Z
 
-evalA :: Aexp -> State -> Z
-evalA (N n) _ = n
-evalA (V v) sigma = sigma v
-evalA (Mult lhs rhs) sigma = (evalA lhs sigma) * (evalA rhs sigma)
-evalA (Add lhs rhs) sigma = (evalA lhs sigma) + (evalA rhs sigma)
-evalA (Sub lhs rhs) sigma = (evalA lhs sigma) - (evalA rhs sigma)
+evalA :: State -> Aexp -> Z
+evalA _ (N n) = n
+evalA sigma (V v) = sigma v
+evalA sigma (Mult lhs rhs) = (evalA sigma lhs) * (evalA sigma rhs)
+evalA sigma (Add lhs rhs) = (evalA sigma lhs) + (evalA sigma rhs)
+evalA sigma (Sub lhs rhs) = (evalA sigma lhs) - (evalA sigma rhs)
 
-evalB :: Bexp -> State -> T
-evalB TRUE _ = True
-evalB FALSE _ = False
-evalB (Neg x) sigma = not (evalB x sigma)
-evalB (And lhs rhs) sigma = (evalB lhs sigma) && (evalB rhs sigma)
-evalB (Le lhs rhs) sigma = (evalA lhs sigma) <= (evalA rhs sigma)
-evalB (Eq lhs rhs) sigma = (evalA lhs sigma) == (evalA rhs sigma)
+evalB :: State -> Bexp -> T
+evalB _ TRUE = True
+evalB _ FALSE = False
+evalB sigma (Neg x) = not (evalB sigma x)
+evalB sigma (And lhs rhs) = (evalB sigma lhs) && (evalB sigma rhs)
+evalB sigma (Le lhs rhs) = (evalA sigma lhs) <= (evalA sigma rhs)
+evalB sigma (Eq lhs rhs) = (evalA sigma lhs) == (evalA sigma rhs)
 
 --------------------------------------------------
 -- Natural Semantics
 --------------------------------------------------
---newtype EnvP = EnvP (Pname -> (Stm, EnvP))
-type EnvV = Var -> Z
-type EnvP = Pname -> Stm
-data Env = Env {sigma :: EnvV, tau :: EnvP}
+type Loc = Z
+data StoreReq = New | At Loc deriving Eq
+type Store = StoreReq -> Z
+type EnvV = Var -> Loc
+newtype EnvP = EnvP (Pname -> (Stm, EnvV, EnvP))
+type Env = (EnvV, Store, EnvP)
 
-blankEnv :: Env
-blankEnv = Env (const undefined) (const undefined)
+getenvv :: Env -> EnvV
+getenvv (envv, _, _) = envv
+getsto :: Env -> Store
+getsto (_, sto, _) = sto
+getenvp :: Env -> EnvP
+getenvp (_, _, envp) = envp
 
-sub :: Eq a => (a -> b) -> a -> b -> (a -> b)
-sub f x y x' = if x' == x then y else f x'
+subs :: Eq a => (a -> b) -> a -> b -> (a -> b)
+subs f x' fx' x = if x == x' then fx' else f x
 
-subV :: Env -> Var -> Z -> Env
-subV (Env sigmaf tauf) var val = Env sigmaf' tauf where
-  sigmaf' var' = if var == var' then val else sigmaf var'
+freshen :: Loc -> Loc
+freshen = succ
 
-defProc :: (Pname, Stm) -> Env -> Env
-defProc (pname, body) (Env sigmaf tauf) = Env sigmaf tauf' where
-  tauf' pname' = if pname' == pname then body else tauf pname'
-
-evalS :: Stm -> Env -> Env
-evalS Skip env = env
-evalS (Ass var exp) env = subV env var (evalA exp $ sigma env)
-evalS (Comp a b) env = let env' = (evalS a env) in evalS b env'
-evalS (If cond thn els) env = if (evalB cond $ sigma env) then evalS thn env else evalS els env
-evalS (While cond body) env = if (evalB cond $ sigma env) then evalS (While cond body) env' else env where
-  env' = (evalS body env)
-evalS (Block decv decp body) env = evalS body env'' where
-  env' = evalr . (map toAss) $ decv
-    where evalr = foldr evalS env
-          toAss = uncurry Ass
-  env'' = foldr defProc env' decp
-evalS (Call p) s = evalS (tau s p) s
-
---------------------------------------------------
--- Variable Renaming
---------------------------------------------------
-
-
+evalS :: Env -> Stm -> Env
+evalS env Skip = env
+evalS (envv, sto, envp) (Ass var exp) = (envv, subs sto (At loc) val, envp) where
+  loc = envv var
+  val = evalA (sto . At . envv) exp
+evalS env (Comp s1 s2) = env'' where
+  env' = evalS env s1
+  env'' = evalS env' s2
+evalS env@(envv, sto, envp) (If cond thn elz) = (evalS env) . (bool thn elz) . (evalB (sto . At . envv)) $ cond
+evalS env@(envv, sto, envp) (While cond body) = (bool env env'') . (evalB (sto . At . envv)) $ cond where
+  env' = evalS env body
+  env'' = evalS env' (While cond body)
+evalS env@(envv, sto, envp) (Block decv decp body) = env'' where
+  (env'v, sto') = updv decv envv sto where
+    updv :: DecV -> EnvV -> Store -> (EnvV, Store)
+    updv [] envv sto = (envv, sto)
+    updv ((var, aexp):xs) envv sto = updv xs env'v sto'' where
+      loc = sto New
+      env'v = subs envv var loc
+      val = evalA (sto . At . envv) aexp
+      sto' = subs sto (At loc) val
+      sto'' = subs sto' New (freshen loc)
+  env'p = updp decp envp where
+    updp :: DecP -> EnvP -> EnvP
+    updp [] envp = envp
+    updp ((pname, s):xs) envp@(EnvP envpf) = updp xs (EnvP $ subs envpf pname (s, env'v, envp))
+  env'' = evalS (env'v, sto', env'p) body
+evalS env@(envv, sto, envp@(EnvP envpf)) (Call pname) = (envv, sto', envp) where
+  (pbody, penvv, penvp) = envpf pname
+  (_, sto', _) = evalS (penvv, sto, penvp) pbody
 --------------------------------------------------
 -- Submission
 --------------------------------------------------
---s_static :: Stm -> State -> State
-s_dynamic :: Stm -> State -> State
-s_dynamic stm st = sigma $ evalS stm (Env st (const undefined))
+emptyEnv :: Env
+emptyEnv = (const 0, sto, envp) where
+  sto (At l) = undefined
+  sto New = 1
+  envp = EnvP (const undefined)--(Skip, const 0, envp))
+
+s_static :: Stm -> State -> State
+s_static stm st = sto . At . envv where
+  (envv, sto, envp) = evalS emptyEnv stm
+
+--s_dynamic :: Stm -> State -> State
+--s_dynamic stm st = sigma $ evalS stm (Env st (const undefined))
 --s_mixed :: Stm -> State -> State
 
 --------------------------------------------------
 -- Test programs
 --------------------------------------------------
+
+
 valof :: Var -> String -> Maybe Z
-valof var src = (\s -> s var) <$> (\x -> s_dynamic x (const 0)) <$> parseMaybe program src
+valof var src = (\s -> s var) <$> (\x -> s_static x (const undefined)) <$> parseMaybe program src
 
 yval :: String -> Maybe Z
 yval = valof "y"
@@ -288,15 +314,27 @@ fac_call_fixed = "x := 5;\n\
 scope_test :: String
 scope_test = "//scope test (p.53) \n\
              \begin\n\
-             \    var x:=0;\n\
+             \    var y:=0-90;\n\
+             \    var x:=8;\n\
              \    proc p is x:=x*2;\n\
              \    proc q is call p;\n\
              \    begin\n\
              \        var x:=5;\n\
              \        proc p is x:=x+1;\n\
-             \        call q\n\
+             \        call q;\n\
+             \        y := x\n\
              \    end\n\
              \end\n"
+
+small_scope_test :: String
+small_scope_test = "begin\n\
+                   \    var x := 10;\n\
+                   \    proc p is x := x;\n\
+                   \    begin\n\
+                   \        var x := 20;\n\
+                   \        call p\
+                   \    end\n\
+                   \end\n"
 
 parity :: String
 parity = "y := 203; begin proc iseven is begin proc isodd is (if y = 0 then mod2 := 1 else y := y - 1; call iseven); if y = 0 then mod2 := 0 else (y := y - 1; call isodd) end; call iseven end"
