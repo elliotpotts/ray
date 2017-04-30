@@ -370,4 +370,42 @@ small_scope_test = "begin\n\
                    \end\n"
 
 parity :: String
-parity = "y := 203; begin proc iseven is begin proc isodd is (if y = 0 then mod2 := 1 else y := y - 1; call iseven); if y = 0 then mod2 := 0 else (y := y - 1; call isodd) end; call iseven end"
+parity = "y := 203; \n\
+         \begin \n\
+         \    proc iseven is begin \n\
+         \        proc isodd is (\n\
+         \            if y = 0 then \n\
+         \                mod2 := 1 \n\
+         \            else \n\
+         \                y := y - 1; \n\
+         \                call iseven \n\
+         \        ); \n\
+         \        if y = 0 then \n\
+         \            mod2 := 0 \n\
+         \        else \n\
+         \            y := y - 1;\n\
+         \            call isodd\n\
+         \    end; \n\
+         \    call iseven \n\
+         \end"
+
+parity_local :: String
+parity_local = "begin \n\
+               \    var y := 203; \n\
+               \    proc iseven is begin \n\
+               \        var mod2 := (0 - 1); \n\
+               \        proc isodd is ( \n\
+               \            if y = 0 then \n\
+               \                mod2 := 1 \n\
+               \            else \n\
+               \                y := y - 1;\n\
+               \                call iseven \n\
+               \        ); \n\
+               \        if y = 0 then \n\
+               \            mod2 := 0 \n\
+               \        else \n\
+               \            y := y - 1;\n\
+               \            call isodd \n\
+               \    end; \n\
+               \    call iseven \n\
+               \end"
