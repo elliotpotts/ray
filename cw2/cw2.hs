@@ -216,7 +216,7 @@ evalS env@(envv, sto, envp) (If cond thn elz) = (evalS env) . (bool elz thn) . (
 evalS env@(envv, sto, envp) (While cond body) = (bool env env'') . (evalB (toSt sto envv)) $ cond where
   env' = evalS env body
   env'' = evalS env' (While cond body)
-evalS env@(envv, sto, envp) (Block decv decp body) = env'' where
+evalS env@(envv, sto, envp) (Block decv decp body) = (envv, sto'', envp) where
   (env'v, sto') = updv decv envv sto where
     updv :: DecV -> EnvV -> Store -> (EnvV, Store)
     updv [] envv sto = (envv, sto)
@@ -227,7 +227,7 @@ evalS env@(envv, sto, envp) (Block decv decp body) = env'' where
       sto' = ass sto env'v var val
       sto'' = subs sto' var (subs (sto' var) NewLoc (freshen loc))
   env'p = updp decp env'v envp
-  env'' = evalS (env'v, sto', env'p) body
+  (env''v, sto'', env''p) = evalS (env'v, sto', env'p) body
 evalS env@(envv, sto, envp@(EnvP envpf)) (Call pname) = (envv, sto', envp) where
   (pbody, penvv, penvp, decp) = envpf pname
   recEnvp = EnvP $ case penvp of
@@ -239,9 +239,9 @@ evalS env@(envv, sto, envp@(EnvP envpf)) (Call pname) = (envv, sto', envp) where
 emptyEnv :: Env
 emptyEnv = (envv, sto, EnvP envpf) where
   envv = const 0
-  esto (At l) = undefined
-  esto NewLoc = 1
-  sto = const esto
+  defaultStoVal (At l) = 0 -- maybe undefined?
+  defaultStoVal NewLoc = 1
+  sto = const defaultStoVal
   envpf _ =  (Skip, envv, EnvP envpf, [])
 
 -- envFromState :: State -> Env
@@ -299,7 +299,8 @@ fac_loop_blk = "/*fac loop (p.23)*/ \n\
                \    (while !(x=1) do \n\
                \        y:=y*x; \n\
                \        x:=x-1 \n\
-               \    )\n\
+               \    );\n\
+               \    z := y \n\
                \end"
 
 testrec :: String
@@ -398,7 +399,7 @@ parity_nest = "y := 2034; \n\
 
 parity_local :: String
 parity_local = "begin \n\
-               \    var y := 2034; \n\
+               \    var y := 203; \n\
                \    proc isodd is begin \n\
                \        if y = 0 then \n\
                \            mod2 := 1 \n\
@@ -469,3 +470,14 @@ mut_test2 = "begin var x:=10; \n\
             \    y:=x   \n\
             \  )   \n\
             \end"
+
+scope_test3 :: String
+scope_test3 = "x := 10; \n\
+              \begin \n\
+              \    proc foo is y := x; \n\
+              \    proc bar is begin \n\
+              \        var x := 5; \n\
+              \        call foo \n\
+              \    end; \n\
+              \    call foo \n\
+              \end"
