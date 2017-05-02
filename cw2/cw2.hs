@@ -176,10 +176,10 @@ evalB sigma (Eq lhs rhs) = (evalA sigma lhs) == (evalA sigma rhs)
 -- Natural Semantics
 --------------------------------------------------
 type Loc = Z
-data StoreReq = New | At Loc deriving Eq
+data StoreReq = NewLoc | At Loc deriving Eq
 type Store = Var -> StoreReq -> Z
 type EnvV = Var -> Loc
-newtype EnvP = EnvP (Pname -> (Stm, EnvV, EnvP))
+newtype EnvP = EnvP (Pname -> (Stm, EnvV, EnvP, DecP))
 type Env = (EnvV, Store, EnvP)
 
 getenvv :: Env -> EnvV
@@ -201,6 +201,10 @@ toSt sto envv var = (sto var) (At (envv var))
 ass :: Store -> EnvV -> Var -> Z -> Store
 ass sto envv var val = subs sto var (subs (sto var) (At loc) val) where loc = envv var
 
+updp :: DecP -> EnvV -> EnvP -> EnvP
+updp decp envv envp = foldr upd1p envp decp where
+  upd1p (pname, s) envp@(EnvP envpf) = EnvP $ subs envpf pname (s, envv, envp, decp)
+
 evalS :: Env -> Stm -> Env
 evalS env Skip = env
 evalS (envv, sto, envp) (Ass var exp) = (envv, ass sto envv var val, envp) where
@@ -217,21 +221,18 @@ evalS env@(envv, sto, envp) (Block decv decp body) = env'' where
     updv :: DecV -> EnvV -> Store -> (EnvV, Store)
     updv [] envv sto = (envv, sto)
     updv ((var, aexp):xs) envv sto = updv xs env'v sto'' where
-      loc = sto var  New
+      loc = sto var NewLoc
       env'v = subs envv var loc
       val = evalA (toSt sto envv) aexp
-      sto' = ass sto env'v var val --subs sto (At loc) val
-      sto'' = subs sto' var (subs (sto' var) New (freshen loc))
-  env'p = updp decp envp where
-    updp :: DecP -> EnvP -> EnvP
-    updp [] envp = envp
-    updp ((pname, s):xs) envp@(EnvP envpf) = updp xs (EnvP $ subs envpf pname (s, env'v, envp))
+      sto' = ass sto env'v var val
+      sto'' = subs sto' var (subs (sto' var) NewLoc (freshen loc))
+  env'p = updp decp env'v envp
   env'' = evalS (env'v, sto', env'p) body
 evalS env@(envv, sto, envp@(EnvP envpf)) (Call pname) = (envv, sto', envp) where
-  (pbody, penvv, penvp) = envpf pname
+  (pbody, penvv, penvp, decp) = envpf pname
   recEnvp = EnvP $ case penvp of
-    EnvP penvpf -> subs penvpf pname (pbody, penvv, recEnvp)
-  (_, sto', _) = evalS (penvv, sto, recEnvp) pbody
+    EnvP penvpf -> subs penvpf pname (pbody, penvv, recEnvp, decp)
+  (_, sto', _) = evalS (penvv, sto, (updp decp penvv recEnvp)) pbody
 --------------------------------------------------
 -- Submission
 --------------------------------------------------
@@ -239,9 +240,17 @@ emptyEnv :: Env
 emptyEnv = (envv, sto, EnvP envpf) where
   envv = const 0
   esto (At l) = undefined
-  esto New = 1
-  sto _ = esto
-  envpf _ =  (Skip, envv, EnvP envpf)
+  esto NewLoc = 1
+  sto = const esto
+  envpf _ =  (Skip, envv, EnvP envpf, [])
+
+-- envFromState :: State -> Env
+-- envFromState st = (envv, sto, EnvP envpf) where
+--   envv = const 0
+--   vsto (At l) = undefined
+--   vsto NewLoc = 1
+--   sto = const vsto
+--   envpf = const (Skip, envv, EnvP envpf, [])
 
 s_static :: Stm -> State -> State
 s_static stm st = toSt sto envv where
@@ -254,8 +263,6 @@ s_static stm st = toSt sto envv where
 --------------------------------------------------
 -- Test programs
 --------------------------------------------------
-
-
 valof :: Var -> String -> Maybe Z
 valof var src = (\s -> s var) <$> (\x -> s_static x (const undefined)) <$> parseMaybe program src
 
@@ -369,43 +376,96 @@ small_scope_test = "begin\n\
                    \    end\n\
                    \end\n"
 
-parity :: String
-parity = "y := 203; \n\
-         \begin \n\
-         \    proc iseven is begin \n\
-         \        proc isodd is (\n\
-         \            if y = 0 then \n\
-         \                mod2 := 1 \n\
-         \            else \n\
-         \                y := y - 1; \n\
-         \                call iseven \n\
-         \        ); \n\
-         \        if y = 0 then \n\
-         \            mod2 := 0 \n\
-         \        else \n\
-         \            y := y - 1;\n\
-         \            call isodd\n\
-         \    end; \n\
-         \    call iseven \n\
-         \end"
+parity_nest :: String
+parity_nest = "y := 2034; \n\
+              \begin \n\
+              \    proc iseven is begin \n\
+              \        proc isodd is (\n\
+              \            if y = 0 then \n\
+              \                mod2 := 1 \n\
+              \            else \n\
+              \                y := y - 1; \n\
+              \                call iseven \n\
+              \        ); \n\
+              \        if y = 0 then \n\
+              \            mod2 := 0 \n\
+              \        else \n\
+              \            y := y - 1;\n\
+              \            call isodd\n\
+              \    end; \n\
+              \    call iseven \n\
+              \end"
 
 parity_local :: String
 parity_local = "begin \n\
-               \    var y := 203; \n\
+               \    var y := 2034; \n\
+               \    proc isodd is begin \n\
+               \        if y = 0 then \n\
+               \            mod2 := 1 \n\
+               \        else \n\
+               \            y := y - 1; \n\
+               \            call iseven \n\
+               \    end; \n\
                \    proc iseven is begin \n\
-               \        var mod2 := (0 - 1); \n\
-               \        proc isodd is ( \n\
-               \            if y = 0 then \n\
-               \                mod2 := 1 \n\
-               \            else \n\
-               \                y := y - 1;\n\
-               \                call iseven \n\
-               \        ); \n\
                \        if y = 0 then \n\
                \            mod2 := 0 \n\
                \        else \n\
-               \            y := y - 1;\n\
+               \            y := y - 1; \n\
                \            call isodd \n\
                \    end; \n\
                \    call iseven \n\
                \end"
+
+parity_scope :: String
+parity_scope = "begin\n\
+               \  var x := 102;\n\
+               \  proc isEven is (\n\
+               \    if x = 0 then \n\
+               \      y := 0 \n\
+               \    else \n\
+               \      x := x - 1; \n\
+               \      call isOdd \n\
+               \  ); \n\
+               \  proc isOdd is (\n\
+               \    if x = 0 then \n\
+               \      y := 1 \n\
+               \    else \n\
+               \      x := x - 1; \n\
+               \      call isEven \n\
+               \  ); \n\
+               \  call isEven \n\
+               \end"
+               
+mut_test :: String
+mut_test = "begin\n\
+           \    var y := 203; \n\
+           \    proc iseven is begin \n\
+           \        y := 1\n\
+           \    end;\n\
+           \    call iseven\n\
+           \end"
+
+mut_test2 :: String
+mut_test2 = "begin var x:=10; \n\
+            \  proc foo is (  \n\
+            \    begin  \n\
+            \      x:=x+1;   \n\
+            \      call bar   \n\
+            \    end   \n\
+            \  );   \n\
+            \  proc bar is (   \n\
+            \    begin   \n\
+            \      x:=x+2   \n\
+            \    end   \n\
+            \  );   \n\
+            \  proc baz is ( \n\
+            \    begin   \n\
+            \      x:=x+3;   \n\
+            \      call foo   \n\
+            \    end   \n\
+            \  );   \n\
+            \  (   \n\
+            \    call baz;   \n\
+            \    y:=x   \n\
+            \  )   \n\
+            \end"
