@@ -1,3 +1,5 @@
+module Cw where
+
 import Prelude hiding (product, sum, Num)
 import Control.Applicative
 import Control.Monad
@@ -222,14 +224,23 @@ s_dynamic stm sigma = evalS stm sigma (const undefined) where
 --------------------------------------------------
 -- Mixed
 --------------------------------------------------
-newtype MEnvP = MEnvP (Pname -> (Stm, MEnvP))
+newtype MEnvP = MEnvP (Pname -> (Stm, MEnvP, DecP))
 
 ass_m :: State -> Var -> Z -> State
 ass_m f x' fx' x = if x == x' then fx' else f x
 
+--updp_m :: DecP -> MEnvP -> MEnvP
+--updp_m decp envp = foldr upd1p envp decp where
+--  upd1p (pname, body) envp@(MEnvP envpf) = MEnvP $ sub envpf pname (body, envp)
+
 updp_m :: DecP -> MEnvP -> MEnvP
-updp_m [] envp = envp
-updp_m ((pname, body):xs) envp@(MEnvP envpf) = updp_m xs (MEnvP $ sub envpf pname (body, envp))
+updp_m decp envp = update decp envp where
+  update [] envp = envp
+  update ((pname, body):xs) envp@(MEnvP envpf) = updp_m xs (MEnvP $ sub envpf pname (body, envp, decp))
+
+--updp_s :: DecP -> EnvV -> SEnvP -> SEnvP
+--updp_s decp envv envp = foldr upd1p envp decp where
+--  upd1p (pname, s) envp@(SEnvP envpf) = SEnvP $ subs envpf pname (s, envv, envp, decp)
 
 restore_m :: DecV -> State -> State -> State
 restore_m [] new old = new
@@ -253,9 +264,10 @@ s_mixed stm sigma = evalS stm sigma (MEnvP $ const undefined) where
     envp' = updp_m decp envp
     st'' = evalS body st' envp'
     st''' = restore_m decv st'' st
-  evalS (Call pname) st envp@(MEnvP envpf) = evalS pbody st penvp' where
-    (pbody, (MEnvP penvpf)) = envpf pname
-    penvp' = MEnvP $ sub penvpf pname (pbody, penvp')
+  evalS (Call pname) st envp@(MEnvP envpf) = evalS pbody st penvp'' where
+    (pbody, penvp, decp) = envpf pname
+    (MEnvP penvp'f) = updp_m decp penvp
+    penvp'' = MEnvP $ sub penvp'f pname (pbody, penvp'', decp)
   
 --------------------------------------------------
 -- Static
