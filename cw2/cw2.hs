@@ -1,4 +1,5 @@
 import Prelude hiding (product, sum, Num)
+import Control.Applicative
 import Control.Monad
 import Text.Megaparsec hiding (parse, State)
 import qualified Text.Megaparsec as MP
@@ -6,7 +7,17 @@ import qualified Text.Megaparsec.Lexer as Lexer
 import Text.Megaparsec.Expr
 import Text.Megaparsec.String
 import Data.List hiding (product, sum)
-import Data.Bool
+
+----------------------------------------
+-- Utils
+----------------------------------------
+
+bool :: a -> a -> Bool -> a
+bool thn _ True = thn
+bool _ elz False = elz
+
+sub :: Eq a => (a -> b) -> a -> b -> (a -> b)
+sub f x' fx' x = if x' == x then fx' else f x
 
 --------------------------------------------------
 -- Syntax
@@ -173,23 +184,97 @@ evalB sigma (Le lhs rhs) = (evalA sigma lhs) <= (evalA sigma rhs)
 evalB sigma (Eq lhs rhs) = (evalA sigma lhs) == (evalA sigma rhs)
 
 --------------------------------------------------
--- Natural Semantics
+-- Dynamic
+--------------------------------------------------
+type DEnvP = Pname -> Stm
+
+ass_d :: State -> Var -> Z -> State
+ass_d f x' fx' x = if x == x' then fx' else f x
+
+updp_d :: DecP -> DEnvP -> DEnvP
+updp_d [] envp = envp
+updp_d ((pname, body):xs) envp = updp_d xs (sub envp pname body)
+
+restore_d :: DecV -> State -> State -> State
+restore_d [] new old = new
+restore_d ((var, _):xs) new old = restore_d xs (sub new var (old var)) new
+
+s_dynamic :: Stm -> State -> State
+s_dynamic stm sigma = evalS stm sigma (const undefined) where
+  evalS :: Stm -> State -> DEnvP -> State
+  evalS (Ass var aexp) st envp = ass_d st var (evalA st aexp)
+  evalS Skip st envp = st
+  evalS (Comp a b) st envp = let st' = evalS a st envp in evalS b st' envp
+  evalS (If cond thn elz) st envp = evalS (bool thn elz (evalB st cond)) st envp
+  evalS loop@(While cond body) st envp = bool st'' st (evalB st cond) where
+    st' = evalS body st envp
+    st'' = evalS (While cond body) st' envp 
+  evalS (Block decv decp body) st envp = st''' where
+    updv_d :: DecV -> State -> State
+    updv_d [] st = st
+    updv_d ((var, aexp):xs) st = updv_d xs (ass_d st var (evalA st aexp))
+    st' = updv_d decv st
+    envp' = updp_d decp envp
+    st'' = evalS body st' envp'
+    st''' = restore_d decv st'' st
+  evalS (Call pname) st envp = evalS (envp pname) st envp
+
+--------------------------------------------------
+-- Mixed
+--------------------------------------------------
+newtype MEnvP = MEnvP (Pname -> (Stm, MEnvP))
+
+ass_m :: State -> Var -> Z -> State
+ass_m f x' fx' x = if x == x' then fx' else f x
+
+updp_m :: DecP -> MEnvP -> MEnvP
+updp_m [] envp = envp
+updp_m ((pname, body):xs) envp@(MEnvP envpf) = updp_m xs (MEnvP $ sub envpf pname (body, envp))
+
+restore_m :: DecV -> State -> State -> State
+restore_m [] new old = new
+restore_m ((var, _):xs) new old = restore_m xs (sub new var (old var)) new
+
+s_mixed :: Stm -> State -> State
+s_mixed stm sigma = evalS stm sigma (MEnvP $ const undefined) where
+  evalS :: Stm -> State -> MEnvP -> State
+  evalS (Ass var aexp) st envp = ass_m st var (evalA st aexp)
+  evalS Skip st envp = st
+  evalS (Comp a b) st envp = let st' = evalS a st envp in evalS b st' envp
+  evalS (If cond thn elz) st envp = evalS (bool thn elz (evalB st cond)) st envp
+  evalS loop@(While cond body) st envp = bool st'' st (evalB st cond) where
+    st' = evalS body st envp
+    st'' = evalS (While cond body) st' envp 
+  evalS (Block decv decp body) st envp = st''' where
+    updv_m :: DecV -> State -> State
+    updv_m [] st = st
+    updv_m ((var, aexp):xs) st = updv_m xs (ass_m st var (evalA st aexp))
+    st' = updv_m decv st
+    envp' = updp_m decp envp
+    st'' = evalS body st' envp'
+    st''' = restore_m decv st'' st
+  evalS (Call pname) st envp@(MEnvP envpf) = evalS pbody st penvp' where
+    (pbody, (MEnvP penvpf)) = envpf pname
+    penvp' = MEnvP $ sub penvpf pname (pbody, penvp')
+  
+--------------------------------------------------
+-- Static
 --------------------------------------------------
 type Loc = Z
 data StoreReq = NewLoc | At Loc deriving Eq
 type Store = Var -> StoreReq -> Z
 type EnvV = Var -> Loc
-newtype EnvP = EnvP (Pname -> (Stm, EnvV, EnvP, DecP))
-type Env = (EnvV, Store, EnvP)
+newtype SEnvP = SEnvP (Pname -> (Stm, EnvV, SEnvP, DecP))
+type SEnv = (EnvV, Store, SEnvP)
 
-getenvv :: Env -> EnvV
+getenvv :: SEnv -> EnvV
 getenvv (envv, _, _) = envv
 
-getsto :: Env -> Store
+getsto :: SEnv -> Store
 getsto (_, sto, _) = sto
 
-getenvp :: Env -> EnvP
-getenvp (_, _, envp) = envp
+getsenvp :: SEnv -> SEnvP
+getsenvp (_, _, envp) = envp
 
 subs :: Eq a => (a -> b) -> a -> b -> (a -> b)
 subs f x' fx' x = if x == x' then fx' else f x
@@ -197,55 +282,12 @@ subs f x' fx' x = if x == x' then fx' else f x
 toSt :: Store -> EnvV -> State
 toSt sto envv var = (sto var) (At (envv var))
 
-ass :: Store -> EnvV -> Var -> Z -> Store
-ass sto envv var val = subs sto var (subs (sto var) (At loc) val) where loc = envv var
+ass_s :: Store -> EnvV -> Var -> Z -> Store
+ass_s sto envv var val = subs sto var (subs (sto var) (At loc) val) where loc = envv var
 
-updp :: DecP -> EnvV -> EnvP -> EnvP
-updp decp envv envp = foldr upd1p envp decp where
-  upd1p (pname, s) envp@(EnvP envpf) = EnvP $ subs envpf pname (s, envv, envp, decp)
-
-s_param :: (Loc -> Loc) -> Env -> Stm -> Env
-s_param freshen = evalS where
-  evalS :: Env -> Stm -> Env
-  evalS env Skip = env
-  evalS (envv, sto, envp) (Ass var exp) = (envv, ass sto envv var val, envp) where
-    val = evalA (toSt sto envv) exp
-  evalS env (Comp s1 s2) = env'' where
-    env' = evalS env s1
-    env'' = evalS env' s2
-  evalS env@(envv, sto, envp) (If cond thn elz) = (evalS env) . (bool elz thn) . (evalB (toSt sto envv)) $ cond
-  evalS env@(envv, sto, envp) (While cond body) = (bool env env'') . (evalB (toSt sto envv)) $ cond where
-    env' = evalS env body
-    env'' = evalS env' (While cond body)
-  evalS env@(envv, sto, envp) (Block decv decp body) = (envv, sto'', envp) where
-    (env'v, sto') = updv decv envv sto where
-      updv :: DecV -> EnvV -> Store -> (EnvV, Store)
-      updv [] envv sto = (envv, sto)
-      updv ((var, aexp):xs) envv sto = updv xs env'v sto'' where
-        loc = sto var NewLoc
-        env'v = subs envv var loc
-        val = evalA (toSt sto envv) aexp
-        sto' = ass sto env'v var val
-        sto'' = subs sto' var (subs (sto' var) NewLoc (freshen loc))
-    env'p = updp decp env'v envp
-    (env''v, sto'', env''p) = evalS (env'v, sto', env'p) body
-  evalS env@(envv, sto, envp@(EnvP envpf)) (Call pname) = (envv, sto', envp) where
-    (pbody, penvv, penvp, decp) = envpf pname
-    recEnvp = EnvP $ case penvp of
-      EnvP penvpf -> subs penvpf pname (pbody, penvv, recEnvp, decp)
-    (_, sto', _) = evalS (penvv, sto, (updp decp penvv recEnvp)) pbody
---------------------------------------------------
--- Submission
---------------------------------------------------
-
-s_mixed :: Stm -> State -> State
-s_mixed stm sigma = toSt sto' env'v where
-  sto :: Store
-  sto var (At l) = sigma var
-  sto _ NewLoc = 0
-  envv = const 0
-  envpf _ = (Skip, envv, EnvP envpf, [])
-  (env'v, sto', env'p) = s_param id (envv, sto, EnvP envpf) stm
+updp_s :: DecP -> EnvV -> SEnvP -> SEnvP
+updp_s decp envv envp = foldr upd1p envp decp where
+  upd1p (pname, s) envp@(SEnvP envpf) = SEnvP $ subs envpf pname (s, envv, envp, decp)
 
 s_static :: Stm -> State -> State
 s_static stm sigma = toSt sto' env'v where
@@ -253,8 +295,38 @@ s_static stm sigma = toSt sto' env'v where
   sto var (At l) = sigma var
   sto _ NewLoc = 1
   envv = const 0
-  envpf _ = (Skip, envv, EnvP envpf, [])
-  (env'v, sto', env'p) = s_param succ (envv, sto, EnvP envpf) stm
+  envpf _ = (Skip, envv, SEnvP envpf, [])
+  (env'v, sto', env'p) = evalS (envv, sto, SEnvP envpf) stm where
+    freshen :: Loc -> Loc
+    freshen = succ
+    evalS :: SEnv -> Stm -> SEnv
+    evalS env Skip = env
+    evalS (envv, sto, envp) (Ass var exp) = (envv, ass_s sto envv var val, envp) where
+      val = evalA (toSt sto envv) exp
+    evalS env (Comp s1 s2) = env'' where
+      env' = evalS env s1
+      env'' = evalS env' s2
+    evalS env@(envv, sto, envp) (If cond thn elz) = (evalS env) . (bool thn elz) . (evalB (toSt sto envv)) $ cond
+    evalS env@(envv, sto, envp) (While cond body) = (bool env'' env) . (evalB (toSt sto envv)) $ cond where
+      env' = evalS env body
+      env'' = evalS env' (While cond body)
+    evalS env@(envv, sto, envp) (Block decv decp body) = (envv, sto'', envp) where
+      (env'v, sto') = updv decv envv sto where
+        updv :: DecV -> EnvV -> Store -> (EnvV, Store)
+        updv [] envv sto = (envv, sto)
+        updv ((var, aexp):xs) envv sto = updv xs env'v sto'' where
+          loc = sto var NewLoc
+          env'v = subs envv var loc
+          val = evalA (toSt sto envv) aexp
+          sto' = ass_s sto env'v var val
+          sto'' = subs sto' var (subs (sto' var) NewLoc (freshen loc))
+      env'p = updp_s decp env'v envp
+      (env''v, sto'', env''p) = evalS (env'v, sto', env'p) body
+    evalS env@(envv, sto, envp@(SEnvP envpf)) (Call pname) = (envv, sto', envp) where
+      (pbody, penvv, penvp, decp) = envpf pname
+      recEnvp = SEnvP $ case penvp of
+        SEnvP penvpf -> subs penvpf pname (pbody, penvv, recEnvp, decp)
+      (_, sto', _) = evalS (penvv, sto, (updp_s decp penvv recEnvp)) pbody
 
 --------------------------------------------------
 -- Test programs
@@ -280,7 +352,6 @@ simple_call = "y:=1; \n\
 fac_loop :: String
 fac_loop = "/*fac loop (p.23)*/ \n\
             \y:=1; \n\
-            \x := 5; \n\
             \(while !(x=1) do \n\
             \    y:=y*x; \n\
             \    x:=x-1 \n\
@@ -305,7 +376,7 @@ testrec = "begin \n\
           \        if false then\n\
           \            x := 10 \n\
           \        else (\n\
-          \            x := 0\n\
+          \            x := 20\n\
           \        )\n\
           \    end; \n\
           \    x := 4; \n\
@@ -350,33 +421,15 @@ fac_call_fixed = "x := 5;\n\
 
 scope_test :: String
 scope_test = "//scope test (p.53) \n\
-             \begin\n\
-             \    var y:=0-90;\n\
-             \    var x:=8;\n\
+             \begin var x := 8;\n\
              \    proc p is x:=x*2;\n\
              \    proc q is call p;\n\
              \    begin\n\
              \        var x:=5;\n\
              \        proc p is x:=x+1;\n\
-             \        call q;\n\
-             \        y := x\n\
+             \        call q; y := x\n\
              \    end\n\
              \end\n"
-
-scope_test_glob :: String
-scope_test_glob = "//scope test (p.53) \n\
-                  \y := 100; \n\
-                  \x := 8; \n\
-                  \begin\n\
-                  \    proc p is x:=x*2;\n\
-                  \    proc q is call p;\n\
-                  \    begin\n\
-                  \        var x:=5;\n\
-                  \        proc p is x:=x+1;\n\
-                  \        call q;\n\
-                  \        y := x\n\
-                  \    end\n\
-                  \end\n"
 
 small_scope_test :: String
 small_scope_test = "begin\n\
@@ -491,3 +544,7 @@ scope_test3 = "x := 10; \n\
               \    end; \n\
               \    call foo \n\
               \end"
+
+dyn_test :: String
+dyn_test = "x := 10; \n\
+           \begin var x := 5; skip end"
