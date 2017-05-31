@@ -1,4 +1,4 @@
-module Cw where
+-- Time is 15:22:15
 
 import Prelude hiding (product, sum, Num)
 import Control.Applicative
